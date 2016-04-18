@@ -11,7 +11,8 @@ long_description = '\n\n'.join([
 install_requires = [
     'setuptools',
     'celery',
-    'lxml'
+    'lxml',
+    'ciso8601'
     ],
 
 setup(name='lizard-scrapelib',
