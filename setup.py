@@ -9,10 +9,11 @@ long_description = '\n\n'.join([
     ])
 
 install_requires = [
-    'setuptools',
     'celery',
+    'ciso8601',
+    'lizard-connector',
     'lxml',
-    'ciso8601'
+    'setuptools',
     ],
 
 setup(name='lizard-scrapelib',
@@ -34,5 +35,7 @@ setup(name='lizard-scrapelib',
       install_requires=install_requires,
       entry_points={
           'console_scripts': [
+              'noaa = lizard_scrapelib.noaa:main',
+              'mekong = lizard_scrapelib.mekong:main'
           ]},
       )
