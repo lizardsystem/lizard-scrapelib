@@ -14,6 +14,7 @@ install_requires = [
     'lizard-connector',
     'lxml',
     'setuptools',
+    'rasterstats',
     ],
 
 setup(name='lizard-scrapelib',
@@ -36,6 +37,7 @@ setup(name='lizard-scrapelib',
       entry_points={
           'console_scripts': [
               'noaa = lizard_scrapelib.noaa:main',
-              'mekong = lizard_scrapelib.mekong:main'
+              'mekong = lizard_scrapelib.mekong:main',
+              'et0 = lizard_scrapelib.modis_et:main'
           ]},
       )

@@ -12,6 +12,11 @@ Contains
 Install
 -------
 
+- First install dev packages in case you haven't already::
+
+    sudo apt-get install libgdal-dev
+    sudo apt-get install libgdal1-dev
+
 - Run buildout with Python 3::
 
     python3 bootstrap.py

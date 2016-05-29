@@ -2,11 +2,13 @@ import os
 import ftplib
 
 from osgeo import gdal
+from osgeo import osr
 import lizard_scrapelib.pyftpclient
 import numpy as np
+import rasterstats
 
 
-def hdf_subdataset_extraction(hdf_file, dst_dir, subdataset=0):
+def hdf_subdataset_extraction(hdf_file, geotiff_path, subdataset=0):
     """
     unpack a single subdataset from a HDF5 container and write to GeoTiff
     taken from:
@@ -17,26 +19,27 @@ def hdf_subdataset_extraction(hdf_file, dst_dir, subdataset=0):
     band_ds = gdal.Open(hdf_ds.GetSubDatasets()[subdataset][0], gdal.GA_ReadOnly)
 
     # read into numpy array
-    band_array = band_ds.ReadAsArray().astype(np.int16)
+    band_array = band_ds.ReadAsArray().astype(np.float64)
 
     # convert no_data values
     band_array[band_array == -28672] = -32768
 
-    # build output path
-    band_path = os.path.join(dst_dir, os.path.basename(os.path.splitext(hdf_file)[0]) + "-sd" + str(subdataset+1) + ".tif")
-
     # write raster
-    out_ds = gdal.GetDriverByName('GTiff').Create(band_path,
-                                                  band_ds.RasterXSize,
-                                                  band_ds.RasterYSize,
-                                                  1,  #Number of bands
-                                                  gdal.GDT_Int16,
-                                                  ['COMPRESS=LZW', 'TILED=YES'])
-    out_ds.SetGeoTransform(band_ds.GetGeoTransform())
-    out_ds.SetProjection(band_ds.GetProjection())
-    out_ds.GetRasterBand(1).WriteArray(band_array)
-    out_ds.GetRasterBand(1).SetNoDataValue(-32768)
+    out_ds = gdal.GetDriverByName('GTiff')
+    print(out_ds)
+    geotiff_dataset = out_ds.Create(geotiff_path,
+                  band_ds.RasterXSize,
+                  band_ds.RasterYSize,
+                  1,  #Number of bands
+                  gdal.GDT_Float64,
+                  ['COMPRESS=LZW', 'TILED=YES'])
+    geotiff_dataset.SetGeoTransform(band_ds.GetGeoTransform())
+    geotiff_dataset.SetProjection(band_ds.GetProjection())
+    geotiff_dataset.GetRasterBand(1).WriteArray(band_array)
+    geotiff_dataset.GetRasterBand(1).SetNoDataValue(-32768)
+    geotiff_dataset = None  #close dataset to write to disc
     out_ds = None  #close dataset to write to disc
+
 
 
 def ftplist(ftp_dir):
@@ -53,6 +56,15 @@ def ftplist(ftp_dir):
             raise
     ftp.close()
     return files
+
+
+def calculate_stats(tiff, shape):
+    return rasterstats.zonal_stats(
+        shape,
+        tiff,
+        stats="min max median std range",
+        add_stats={"IQR": lambda x: np.subtract(*np.percentile(x, [75, 25]))}
+    )
 
 
 def grab_file(from_, to_, to_converted):
@@ -75,11 +87,14 @@ def main():
     for preffered_dir in dirs:
         files = ftplist(preffered_dir)
         print(preffered_dir)
-        for tilecode in ('h25v06', 'h26v06', 'h27v06', 'h27v07', 'h28v06',
-                         'h28v07', 'h28v08'):
-            filename = next(f for f in files if tilecode in f)
-            filepath = os.path.join(preffered_dir, filename)
-            grab_file(filepath, filename, os.path.join(datadir, filename))
+        #for tilecode in ('h25v06', 'h26v06'): #, 'h27v06', 'h27v07', 'h28v06', 'h28v07', 'h28v08'):
+        tilecode = 'h26v06'
+        filename = next(f for f in files if tilecode in f)
+        filepath = os.path.join(preffered_dir, filename)
+        geotiff_path = os.path.join(datadir, os.path.basename(os.path.splitext(filepath)[0]) + "-sd1.tif")
+        grab_file(filepath, filename, geotiff_path)
+        shape_path = os.path.join(datadir, 'Bogra', 'Bogra_upazillas.shp')
+
 
     # first login and go to the preferred directory.
     # for example: ftp://ftp.ntsg.umt.edu/
