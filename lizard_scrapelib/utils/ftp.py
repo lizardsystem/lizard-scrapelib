@@ -1,5 +1,4 @@
 import ftplib
-import logging
 import os
 
 try:
@@ -19,12 +18,8 @@ except ImportError:
 logger = command.setup_logger(__name__)
 
 
-def grab_file(filename='1800.csv.gz',
-                       download_dir='data',
-                       ftp_url='ftp.ncdc.noaa.gov',
-                       ftp_dir='/pub/data/ghcn/daily/by_year/',
-                       unzip_gzip=True,
-                       unzip_tar=True):
+def grab_file(filename, ftp_url, ftp_dir='/pub/data/ghcn/daily/by_year/',
+              download_dir='data', unzip_gzip=True, unzip_tar=True):
     """Grabs file from ftp and ungzips it."""
     logger.info('grabbing from ftp %s', filename)
     file_path = os.path.join(download_dir, filename)
@@ -39,7 +34,7 @@ def grab_file(filename='1800.csv.gz',
     return file_path
 
 
-def listdir(ftp_dir, ftp_url, config):
+def listdir(ftp_url, ftp_dir, config):
     """
     Lists files in an ftp directory.
 

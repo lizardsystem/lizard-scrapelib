@@ -7,7 +7,19 @@ try:
 except ImportError:
     from lizard_scrapelib.utils import command
 
+
 logger = command.setup_logger(__name__)
+
+
+def loc_code(name, code):
+    return name + (("#" + code) if code else '')
+
+
+def endpoint(config, endpoint_type):
+    return lizard_connector.connector.Endpoint(
+        username=config['login']['username'], password=config['login'][
+            'password'],
+        base=config['lizardbase'], endpoint=endpoint_type)
 
 
 def find_location(location_name, config, code=''):
@@ -22,14 +34,11 @@ def find_location(location_name, config, code=''):
         The lizard api location uuid.
     """
     # create connector
-    timeseries_location = lizard_connector.connector.Endpoint(
-        username=config['username'], password=config['password'],
-        base=config['lizardbase'], endpoint="locations"
-    )
+    timeseries_location = endpoint(config, 'locations')
     try:
         # query for station in locations and element type
         result = timeseries_location.download(name=location_name)
-        code_ = location_name + ("#" + code) if code else ''
+        code_ = loc_code(location_name, code)
         result = [r for r in result if r['organisation_code'] == code_]
         try:
             # multiple results are (should) not (be) possible
@@ -40,13 +49,6 @@ def find_location(location_name, config, code=''):
             return None
     except urllib.error.HTTPError:
         return None
-
-
-def endpoint(config, endpoint_type):
-    return lizard_connector.connector.Endpoint(
-        username=config['login']['username'], password=config['login'][
-            'password'],
-        base=config['lizardbase'], endpoint=endpoint_type)
 
 
 @command.store_to_dict(dict_name='timeseries_uuids',
@@ -63,9 +65,9 @@ def find_timeseries(location_name, config, code=''):
     try:
         # query for station and element type
         result = timeseries.download(location__name=location_name)
-        code_ = '#' + code if code else ''
-        result = [r for r in result if r['location']['organisation_code'] \
-                  == location_name + code_]
+        code_ = loc_code(location_name, code)
+        result = [r for r in result if
+                  r['location']['organisation_code'] == code_]
         try:
             # multiple results are (should) not (be) possible
             return result[0].get('uuid')
@@ -79,12 +81,18 @@ def find_timeseries(location_name, config, code=''):
     # find the location to create a new timeseries for
     location_uuid = find_location(location_name, config, code)
     if location_uuid:
-        timeseries_uuid = create_timeseries(
-            config, location_name, location_uuid, code=code_,
-            unit=config['units'][code]['parameterId'])
-        return timeseries_uuid
+        try:
+            timeseries_uuid = create_timeseries(
+                config, location_name, location_uuid, code=code,
+                unit=config['units'][code]['parameterId'])
+            return timeseries_uuid
+        except urllib.error.HTTPError:
+            logger.exception("Could not create timeseries with location_name "
+                             "= %s, code = %s and location_uuid = %s",
+                             location_name, code, location_uuid)
+            return None
     logger.info('Timeseries not created for location %s and organisation code'
-                 'part: %s', location_name, code)
+                'part: %s', location_name, code)
     return None
 
 
@@ -97,7 +105,7 @@ def create_timeseries(config, location_name, location_uuid, code="", unit=None,
         "location": location_uuid,
         "organisation_code": id_,
         "access_modifier": access_modifier,
-        "supplier_code": code,
+        "supplier_code": loc_code(location_name, code),
         "supplier": supplier,
         "parameter_referenced_unit": unit,
         "value_type": value_type
@@ -116,19 +124,19 @@ def create_location(config, location_name, code, lon=None, lat=None,
                     ddsc_show_on_map=False):
     if not geometry and lat and lon:
         geometry = lizard_connector.queries.wkt_point(lon, lat)
-    location = endpoint(config, 'location')
+    location = endpoint(config, 'locations')
     location_data = {
         "name": location_name,
         "organisation": config['login']['organisation'],
-        "organisation_code": code,
+        "organisation_code": loc_code(location_name, code),
         "geometry": geometry,
         "access_modifier": access_modifier,
         "ddsc_show_on_map": ddsc_show_on_map,
     }
     logger.info('Creating new timeseries location with name: %s and code: %s',
                 location_name, code)
-    timeseries_info = location.upload(data=location_data)
-    uuid = timeseries_info['uuid']
+    location_info = location.upload(data=location_data)
+    uuid = location_info['uuid']
     logger.info('New timeseries created with uuid: %s', uuid)
     return uuid
 
@@ -161,13 +169,14 @@ def lizard_create_commands():
             location_uuid = create_location(
                 config, args.name, args.code, lon=args.lon, lat=args.lat,
                 access_modifier=args.access_modifier)
-            logger.info('Created timeseries location with uuid %s in backend '
-                        '%s', args.name, location_uuid, args.lizard_backend)
+            logger.info('Created timeseries location %s with uuid %s in '
+                        'backend %s', args.name, location_uuid,
+                        args.lizard_backend)
         elif args.endpoint == "timeseries":
-            unit = config['units'][args.code]
+            unit = config['units'][args.code]["parameterId"]
             location_uuid = find_location(args.name, config, args.code)
-            logger.debug('Creating location at %s with:\n'
-                         '  location uuid: %\s'
+            logger.debug('Creating timeseries at %s with:\n'
+                         '  location uuid: %s\n'
                          '  organisation code: %s#%s\n'
                          '  unit: %s,\n'
                          '  access modifier: %s',

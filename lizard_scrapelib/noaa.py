@@ -31,8 +31,10 @@ def parse_file(file_path, data_dir="data", codes=CONFIG['codes'],
                delete_values=False):
     """Uploads a year of data into the Lizard-api for given element types."""
     timeseries = lizard_connector.connector.Endpoint(
-        username=CONFIG['username'], password=CONFIG['password'],
-        base=CONFIG['lizardbase'], endpoint='timeseries')
+        username=CONFIG['login']['username'],
+        password=CONFIG['login']['password'],
+        base=CONFIG['lizardbase'],
+        endpoint='timeseries')
     timeseries_uuids = {}
 
     for location_name, code, data in read_file(
@@ -40,26 +42,23 @@ def parse_file(file_path, data_dir="data", codes=CONFIG['codes'],
         # get uuid for timeseries and store uuid to dict.
         uuid = timeseries_uuids.get(
             ('NOAA_' + location_name, code),
-            lizard.find_timeseries('NOAA_' + location_name, code, CONFIG,
-                            timeseries_uuids=timeseries_uuids)
-        )
+             lizard.find_timeseries(location_name='NOAA_' + location_name,
+                                    config=CONFIG,
+                                    code=code,
+                                    timeseries_uuids=timeseries_uuids))
         if uuid:
             try:
-                timeseries.upload(uuid=uuid, data=data)
+                logger.info('location %s | code %s | uuid %s has data: %s',
+                            location_name, code, uuid, str(data))
+                reaction = timeseries.upload(uuid=uuid, data=[data])
+                logger.info('location %s | code %s responds after sending '
+                            'data: %s',location_name, code, str(reaction))
             except urllib.error.HTTPError as http_error:
-                if '400' in http_error:
-                    logger.exception(
-                        'Error in data found when submitting timeseries '
-                        'data. Station: %s, element_type: %s',
-                        location_name, code)
-                elif '504' in http_error:
-                    logger.exception(
-                        'Timeout error (504 response) when submitting '
-                        'timeseries data to the Lizard API. Waiting one '
-                        'minute before continuing. Station is: %s, '
-                        'element type is: %s, data is: \n  %s',
-                        location_name, code, str(data))
-                    time.sleep(60)
+                logger.exception(
+                    'Error in data found when submitting timeseries '
+                    'data. Station: %s, element_type: %s',
+                    location_name, code)
+                time.sleep(10)
                 if break_on_error:
                     raise
     os.remove(file_path)
@@ -120,7 +119,7 @@ def read_file(codes, filepath, delete_values=False):
             station, date_, element_type, value, _, flag, _, time_ = \
                 line.strip('\n').split(',')
 
-            if time:
+            if time_:
                 date_time = datetime.datetime(
                     *[int(x) for x in [date_[:4], date_[4:6], date_[6:8],
                                        int(time_[:2]) % 24, time_[2:]]]
@@ -130,45 +129,45 @@ def read_file(codes, filepath, delete_values=False):
                     *[int(x) for x in [date_[:4], date_[4:6], date_[6:8]]])
             if element_type in codes:
                 conversion = conversions[element_type]
-                value = None if delete_values else str(int(value) * conversion)
+                value = None if delete_values else float(value) * conversion
                 yield station, element_type, {
-                    "datetime": date_time,
+                    "datetime": date_time.isoformat() + 'Z',
                     "value": value,
                     "flag": flag_codes[flag]
                 }
 
-
-def parse_headers(elem_type, param_units,
-                  ghcnd_stations_filepath='ghcnd-stations.txt'):
-    # ID            1-11   Character
-    # LATITUDE     13-20   Real
-    # LONGITUDE    22-30   Real
-    # ELEVATION    32-37   Real
-    # STATE        39-40   Character
-    # NAME         42-71   Character
-    # GSN FLAG     73-75   Character
-    # HCN/CRN FLAG 77-79   Character
-    # WMO ID       81-85   Character
-    headers = {}
-    station_locations = {}
-    print('parsing headers', elem_type)
-    with open(ghcnd_stations_filepath, 'r') as stations_txt:
-        for line in stations_txt:
-            id = line[:11].strip(' ')
-            lat = float(line[12:20])
-            lon = float(line[21:30])
-            name = line[41:71].strip(' ')
-            code = "NOAA_" + id + "#" + elem_type
-            stationName="NOAA_" + id
-            station_locations[stationName] = (stationName, (lon, lat)) # check lat lon
-            headers[id] = pixml.header(
-                locationId=code,
-                parameterId=param_units['parameterId'],
-                stationName=stationName,
-                lat=lat,
-                lon=lon,
-                units=param_units['units'])
-    return headers, station_locations
+# DEPRECATED! / Refactor for creating locations /
+# def parse_headers(elem_type, param_units,
+#                   ghcnd_stations_filepath='ghcnd-stations.txt'):
+#     # ID            1-11   Character
+#     # LATITUDE     13-20   Real
+#     # LONGITUDE    22-30   Real
+#     # ELEVATION    32-37   Real
+#     # STATE        39-40   Character
+#     # NAME         42-71   Character
+#     # GSN FLAG     73-75   Character
+#     # HCN/CRN FLAG 77-79   Character
+#     # WMO ID       81-85   Character
+#     headers = {}
+#     station_locations = {}
+#     print('parsing headers', elem_type)
+#     with open(ghcnd_stations_filepath, 'r') as stations_txt:
+#         for line in stations_txt:
+#             id = line[:11].strip(' ')
+#             lat = float(line[12:20])
+#             lon = float(line[21:30])
+#             name = line[41:71].strip(' ')
+#             code = "NOAA_" + id + "#" + elem_type
+#             stationName="NOAA_" + id
+#             station_locations[stationName] = (stationName, (lon, lat))
+#             headers[id] = pixml.header(
+#                 locationId=code,
+#                 parameterId=param_units['parameterId'],
+#                 stationName=stationName,
+#                 lat=lat,
+#                 lon=lon,
+#                 units=param_units['units'])
+#     return headers, station_locations
 
 
 # DEPRECATED! / Refactor for creating locations /
@@ -190,7 +189,9 @@ def load_historical_data(
     for year in range(first_year, last_year + 1):
         # get data csv
         filename = str(year) + ".csv.gz"
-        file_path = ftp.grab_file(filename=filename, unzip_tar=False)
+        file_path = ftp.grab_file(ftp_url="ftp.ncdc.noaa.gov",
+                                  filename=filename,
+                                  unzip_tar=False)
         parse_file(file_path, data_dir, codes, units,
                    break_on_error)
     if last_year == datetime.date.today().year:
@@ -199,7 +200,8 @@ def load_historical_data(
 
 def superghcnd_filelist():
     available_files = ftp.listdir(ftp_dir='/pub/data/ghcn/daily/superghcnd/',
-                              config=CONFIG)
+                                  ftp_url="ftp.ncdc.noaa.gov",
+                                  config=CONFIG)
 
     start = datetime.datetime.strptime(CONFIG['last_value_timestamp'],
                                        '%Y-%m-%d')
@@ -225,9 +227,14 @@ def grab_recent(codes=CONFIG['codes'], data_dir="data",
                 break_on_error=False):
     for file in superghcnd_filelist():
         file_paths = ftp.grab_file(
-            file, ftp_dir='/pub/data/ghcn/daily/superghcnd/')
+            file,
+            ftp_url="ftp.ncdc.noaa.gov",
+            ftp_dir='/pub/data/ghcn/daily/superghcnd/')
         for file_path in file_paths:
+            logger.debug('Parsing file: %s', file)
             delete_values = 'delete' in file_path
+            if delete_values:
+                logger.debug('deleting from: %s', file_path)
             parse_file(file_path, data_dir, codes, element_type_units,
                        break_on_error, delete_values=delete_values)
     command.touch_config()
@@ -235,6 +242,7 @@ def grab_recent(codes=CONFIG['codes'], data_dir="data",
 
 def main():
     args = command.argparser(CONFIG)
+    logger.info('################## START NOAA ##################')
 
     last_value_days_till_now = (
         datetime.datetime.now() -
@@ -244,7 +252,7 @@ def main():
     if args.start_year:
         logger.info('Start year found, grabbing data yearly from %s to %s for '
                     'element types: %s', args.start_year, args.end_year,
-                    args.codes.replace(',', ', '))
+                    args.codes)
         load_historical_data(args.start_year,
                              args.end_year,
                              data_dir="data",

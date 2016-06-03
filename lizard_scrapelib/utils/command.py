@@ -211,7 +211,7 @@ def argparser(config):
 
         logger.debug('log_filename is: %s', log_filename)
 
-    if 'code-types' in commandline_args:
+    if 'code_types' in commandline_args:
         args.codes = args.code_types.split(',')
 
         if any(code not in config['codes'] for code in args.codes):
@@ -222,4 +222,9 @@ def argparser(config):
                 logger.exception('Invalid element type found in element '
                                  'types: %s', args.codes)
                 raise
+    if 'start_year' in commandline_args and args.start_year is not None:
+        args.start_year = int(args.start_year)
+    if 'last_year' in commandline_args and args.end_year is not None:
+        args.end_year = int(args.end_year)
+
     return args
