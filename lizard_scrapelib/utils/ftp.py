@@ -18,12 +18,13 @@ except ImportError:
 logger = command.setup_logger(__name__)
 
 
-def grab_file(filename, ftp_url, ftp_dir, username="anonymous", password="",
-              download_dir='data', unzip_gzip=True, unzip_tar=True):
+def grab_file(filename, ftp_url, ftp_dir, port=21, username="anonymous",
+              password="", download_dir='data', unzip_gzip=True,
+              unzip_tar=True):
     """Grabs file from ftp and ungzips it."""
     logger.info('grabbing from ftp %s', filename)
     file_path = os.path.join(download_dir, filename)
-    ftp_client = PyFTPclient(ftp_url, username, password)
+    ftp_client = PyFTPclient(ftp_url, username, port, password)
     ftp_client.download_file(filename, file_path, ftp_dir)
     logger.debug('file grabbed from ftp, unzipping')
     if unzip_gzip:
