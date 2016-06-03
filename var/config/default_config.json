@@ -1,0 +1,31 @@
+{
+  "last_value_timestamp": "1900-01-01",
+  "lizardbase": "https://demo.lizard.net",
+  "codes": ["TMAX", "TMIN", "TAVG", "PRCP", "SNWD", "SNOW", "EVAP"],
+  "units": {
+    "TMAX": {"parameterId": "WNS1923", "units": "oC"},
+    "TMIN": {"parameterId": "WNS1923", "units": "oC"},
+    "TAVG": {"parameterId": "WNS1923", "units": "oC"},
+    "PRCP": {"parameterId": "WNS1400", "units": "mm"},
+    "SNWD": {"parameterId": "WNS1400", "units": "mm"},
+    "SNOW": {"parameterId": "WNS1400", "units": "mm"},
+    "EVAP": {"parameterId": "VERDPG (mm)", "units": "mm"}
+  },
+  "commandline_args": {
+    "description": "Collects GHCN climate data from NOAA and adds this to Lizard. Data are daily values of, where available, temerature (min, max, mean), precipitation, snowfall and (incidently evaporation (only in the US)).",
+    "args": [
+      "verbose",
+      "lizard_backend",
+      "start_year",
+      "end_year",
+      "code_types",
+      "password",
+      "username"
+    ]
+  },
+  "login": {
+    "username": "",
+    "password": "",
+    "organisation": "6f666b72c10942c493afe81a322f811c"
+  }
+}

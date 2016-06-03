@@ -142,5 +142,5 @@ def create_measuringstation_import_zip(
 
 
 # create_measuringstation_import_zip(asset_name="MeasuringStation", station_type=3, prefix="G4AW_MEKONG")
-import datetime
-datetime.timedelta(16385)
+# import datetime
+# datetime.timedelta(16385)

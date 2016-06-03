@@ -38,6 +38,7 @@ setup(name='lizard-scrapelib',
           'console_scripts': [
               'noaa = lizard_scrapelib.noaa:main',
               'mekong = lizard_scrapelib.mekong:main',
-              'et0 = lizard_scrapelib.modis_et:main'
+              'et0 = lizard_scrapelib.modis_et:main',
+              'lizard_create = lizard_scrapelib.utils.lizard:lizard_create_commands'
           ]},
       )

@@ -1,353 +1,141 @@
 import datetime
-import ftplib
-import gzip
-import logging
 import os
-import socket
-import threading
 import time
 import urllib.error
 
 try:
-    import pixml
-    import import_shape
+    from pyftpclient import PyFTPclient
+    from utils import command
+    from utils import ftp
+    from utils import import_shape
+    from utils import lizard
+    from utils import pixml
 except ImportError:
-    from lizard_scrapelib import pixml
-    from lizard_scrapelib import import_shape
-    from lizard_scrapelib.secrets import PWD, USR, NOAA_ORGANISATION
+    from lizard_scrapelib.pyftpclient import PyFTPclient
+    from lizard_scrapelib.utils import command
+    from lizard_scrapelib.utils import ftp
+    from lizard_scrapelib.utils import import_shape
+    from lizard_scrapelib.utils import lizard
+    from lizard_scrapelib.utils import pixml
 
 import lizard_connector
-from pprint import pprint
-
-BASE = 'https://demo.lizard.net'
-
-FIRST_YEAR = 2000
-ELEMENT_TYPES = ("TMAX", "TMIN", "TAVG", "PRCP", "SNWD", "SNOW", "EVAP")
-ELEMENT_TYPE_UNITS = {
-    "TMAX": {"parameterId": "WNS1923", "units": "oC"},
-    "TMIN": {"parameterId": "WNS1923", "units": "oC"},
-    "TAVG": {"parameterId": "WNS1923", "units": "oC"},
-    "PRCP": {"parameterId": "WNS1400", "units": "mm"},
-    "SNWD": {"parameterId": "WNS1400", "units": "mm"},
-    "SNOW": {"parameterId": "WNS1400", "units": "mm"},
-    "EVAP": {"parameterId": "VERDPG (mm)", "units": "mm"}
-}
 
 
-def ungzip(filename, remove=False, encoding='utf-8'):
-    zipped = gzip.GzipFile(filename=filename, mode='rb')
-    new_filename = filename.replace('.gz', '')
-    with open(new_filename, 'w') as new_file:
-        new_file.write(zipped.read().decode(encoding))
-    if remove:
-        os.remove(filename)
-    return new_filename
+# Start logger and read configuration
+logger = command.setup_logger(__name__)
+CONFIG = command.read_config('noaa')
 
 
-def grab_files(data_dir="data", first_year=FIRST_YEAR, last_year=None):
-    if not last_year:
-        last_year = datetime.datetime.now().year
-    filenames = (str(year) + "csv.gz" for year in range(
-        first_year, last_year + 1))
-
-
-def setInterval(interval, times = -1):
-    # This will be the actual decorator,
-    # with fixed interval and times parameter
-    def outer_wrap(function):
-        # This will be the function to be
-        # called
-        def wrap(*args, **kwargs):
-            stop = threading.Event()
-
-            # This is another function to be executed
-            # in a different thread to simulate setInterval
-            def inner_wrap():
-                i = 0
-                while i != times and not stop.isSet():
-                    stop.wait(interval)
-                    function(*args, **kwargs)
-                    i += 1
-
-            t = threading.Timer(0, inner_wrap)
-            t.daemon = True
-            t.start()
-            return stop
-        return wrap
-    return outer_wrap
-
-
-class PyFTPclient:
-    def __init__(self, host, monitor_interval=30):
-        self.host = host
-        self.monitor_interval = monitor_interval
-        self.ptr = None
-        self.max_attempts = 15
-        self.waiting = True
-
-
-    def download_file(self, dst_filename, local_filename=None, dst_dir=None):
-        res = ''
-        if local_filename is None:
-            local_filename = dst_filename
-
-        with open(local_filename, 'w+b') as f:
-            self.ptr = f.tell()
-
-            @setInterval(self.monitor_interval)
-            def monitor():
-                if not self.waiting:
-                    i = f.tell()
-                    if self.ptr < i:
-                        print("%d  -  %0.1f Kb/s" % (i, (i-self.ptr)/(1024*self.monitor_interval)))
-                        self.ptr = i
-                    else:
-                        ftp.close()
-
-
-            def connect():
-                ftp.connect(self.host)
-                ftp.login()
-                if dst_dir:
-                    ftp.cwd(dst_dir)
-                # optimize socket params for download task
-                ftp.sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-                ftp.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 75)
-                ftp.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
-
-            ftp = ftplib.FTP()
-            ftp.set_debuglevel(2)
-            ftp.set_pasv(True)
-
-            connect()
-            ftp.voidcmd('TYPE I')
-            dst_filesize = ftp.size(dst_filename)
-
-            mon = monitor()
-            while dst_filesize > f.tell():
-                try:
-                    connect()
-                    self.waiting = False
-                    # retrieve file from position where we were disconnected
-                    res = ftp.retrbinary('RETR %s' % dst_filename, f.write) if f.tell() == 0 else \
-                              ftp.retrbinary('RETR %s' % dst_filename, f.write, rest=f.tell())
-
-                except:
-                    self.max_attempts -= 1
-                    if self.max_attempts == 0:
-                        mon.set()
-                        logging.exception('')
-                        raise
-                    self.waiting = True
-                    print('waiting 30 sec...')
-                    time.sleep(30)
-                    print('reconnect')
-
-
-            mon.set() #stop monitor
-            ftp.close()
-
-            if not res.startswith('226 Transfer complete'):
-                print('Downloaded file {0} is not full.'.format(dst_filename))
-                # os.remove(local_filename)
-                return None
-
-            return 1
-
-
-def download_file(file_path):
-    """
-    Taken from: http://stackoverflow.com/questions/19692739/python-ftplib-hangs-at-end-of-transfer
-    """
-    print('making connection')
-    ftp = ftplib.FTP('ftp.ncdc.noaa.gov')
-    ftp.login()
-    ftp.set_debuglevel(2)
-
-    # change to relevant folder
-    ftp.cwd('/pub/data/ghcn/daily/by_year/')
-
-    filename = os.path.basename(file_path)
-    sock = ftp.transfercmd('RETR ' + filename)
-    def background(file_path):
-        f = open(file_path, 'wb')
-        while True:
-            block = sock.recv(1024*1024)
-            if not block:
-                break
-            f.write(block)
-        sock.close()
-    t = threading.Thread(target=background, args=(file_path,))
-    t.start()
-    while t.is_alive():
-        t.join(60)
-        print('refreshing connection')
-        ftp.voidcmd('NOOP')
-    print('number of threads running: ', threading.active_count())
-    ftp.quit()
-
-
-def grab_file(file_path='data/1800.csv.gz'):
-    print('grabbing %s', file_path)
-    filename = os.path.basename(file_path)
-    ftp_client = PyFTPclient('ftp.ncdc.noaa.gov')
-    ftp_client.download_file(filename, file_path,
-                             '/pub/data/ghcn/daily/by_year/')
-    print('file grabbed, unzipping')
-    file_path = ungzip(file_path, remove=True)
-    print('file grabbed %s', file_path)
-
-
-def find_location(station, element_type):
-    timeseries_location = lizard_connector.connector.Endpoint(
-        username=USR, password=PWD, base=BASE, endpoint="locations"
-    )
-    try:
-        result = timeseries_location.download(name="NOAA_" + station)
-        pprint(result)
-        result = [r for r in result if r['organisation_code']
-                  == "NOAA_" + station + "#" + element_type]
-        try:
-            return result[0].get('uuid')
-        except IndexError:
-            return None
-    except urllib.error.HTTPError:
-        return None
-
-
-def find_timeseries(station, element_type):
+def parse_file(file_path, data_dir="data", codes=CONFIG['codes'],
+               units=CONFIG['units'], break_on_error=False,
+               delete_values=False):
+    """Uploads a year of data into the Lizard-api for given element types."""
     timeseries = lizard_connector.connector.Endpoint(
-        username=USR, password=PWD, base=BASE, endpoint='timeseries')
-    try:
-        result = timeseries.download(location__name="NOAA_" + station)
-        result = [r for r in result if r['location']['organisation_code'] \
-                  == "NOAA_" + station + "#" + element_type]
-        try:
-            return result[0].get('uuid')
-        except IndexError:
-            pass
-    except urllib.error.HTTPError:
-        pass
-    location_uuid = find_location(station, element_type)
-    if location_uuid:
-        id_ = 'NOAA_' + station + '#' + element_type
-        new_timeseries_header = {
-            "name": id_,
-            "location": location_uuid,
-            "organisation_code": id_,
-            "access_modifier": 100,
-            "supplier_code": "NOAA_" + element_type,
-            "supplier": None,
-            "parameter_referenced_unit": ELEMENT_TYPE_UNITS[element_type][
-                'parameterId'],
-            "value_type": 1
-        }
-        new_timeseries_info = timeseries.upload(data=new_timeseries_header)
-        print(new_timeseries_info)
-        pprint(new_timeseries_info)
-        return new_timeseries_info['uuid']
-    return None
+        username=CONFIG['username'], password=CONFIG['password'],
+        base=CONFIG['lizardbase'], endpoint='timeseries')
+    timeseries_uuids = {}
+
+    for location_name, code, data in read_file(
+            codes, file_path, delete_values):
+        # get uuid for timeseries and store uuid to dict.
+        uuid = timeseries_uuids.get(
+            ('NOAA_' + location_name, code),
+            lizard.find_timeseries('NOAA_' + location_name, code, CONFIG,
+                            timeseries_uuids=timeseries_uuids)
+        )
+        if uuid:
+            try:
+                timeseries.upload(uuid=uuid, data=data)
+            except urllib.error.HTTPError as http_error:
+                if '400' in http_error:
+                    logger.exception(
+                        'Error in data found when submitting timeseries '
+                        'data. Station: %s, element_type: %s',
+                        location_name, code)
+                elif '504' in http_error:
+                    logger.exception(
+                        'Timeout error (504 response) when submitting '
+                        'timeseries data to the Lizard API. Waiting one '
+                        'minute before continuing. Station is: %s, '
+                        'element type is: %s, data is: \n  %s',
+                        location_name, code, str(data))
+                    time.sleep(60)
+                if break_on_error:
+                    raise
+    os.remove(file_path)
 
 
-def parse_year(year, data_dir="data", element_types=ELEMENT_TYPES,
-               element_type_units=ELEMENT_TYPE_UNITS):
-    filename = str(year) + ".csv.gz"
-    file_path = os.path.join(data_dir, filename)
-    print('grabbing file for %s', year)
-    grab_file(file_path=file_path)
+def read_file(codes, filepath, delete_values=False):
+    """
+    Reads a year of NOAA data and yields its values.
 
-    timeseries = lizard_connector.connector.Endpoint(
-        username=USR, password=PWD, base=BASE, endpoint='timeseries')
+    The data is stored comma seperated by index:
+    [0] ID = 11 character station identification code
+    [1] YEAR/MONTH/DAY = 8 character date in YYYYMMDD format
+        (e.g. 19860529 = May 29, 1986)
+    [2] ELEMENT = 4 character indicator of element type
+    [3] DATA VALUE = 5 character data value for ELEMENT
+    [4] M-FLAG = 1 character Measurement Flag
+    [5] Q-FLAG = 1 character Quality Flag
+    [6] S-FLAG = 1 character Source Flag
+    [7] OBS-TIME = 4-character time of observation in hour-minute
+        format (i.e. 0700 =7:00 am)
 
-    for element_type in element_types:
-        print('Parsing data for', element_type)
-        all_stations_values_from_file = read_file(element_type, file_path[:-3])
-        pprint(lizard_connector.queries.timeseries_values_data(all_stations_values_from_file[next(iter(all_stations_values_from_file.keys()))]))
-        all_stations_values = {
-            station: lizard_connector.queries.timeseries_values_data(
-                station_values) for station, station_values in
-            all_stations_values_from_file.items()
-        }
-        for station in all_stations_values.keys():
-            # get uuid for timeseries
-            uuid = find_timeseries(station, element_type)
-            if uuid:
-                print('creating timeseries for year %s for station %s', year,
-                      station)
-                print('uploading timeseries for year %s for station %s', year,
-                      station)
-                result = timeseries.upload(uuid=uuid,
-                                           data=all_stations_values[station])
-                pprint(result)
-            else:
-                print('failed for uuid %s', uuid)
+    Where Q-FLAG codes refer to:
+    [0] Blank = did not fail any quality assurance check
+    [1]   D   = failed duplicate check
+    [2]   G   = failed gap check
+    [3]   I   = failed internal consistency check
+    [4]   K   = failed streak/frequent-value check
+    [5]   L   = failed check on length of multiday period
+    [6]   M   = failed megaconsistency check
+    [7]   N   = failed naught check
+    [8]   O   = failed climatological outlier check
+    [9]   R   = failed lagged range check
+    [10]  S   = failed spatial consistency check
+    [11]  T   = failed temporal consistency check
+    [12]  W   = temperature too warm for snow
+    [13]  X   = failed bounds check
+    [14]  Z   = flagged as a result of an official Datzilla
+                investigation
 
+    Args:
+        element_types(list): list of sought after element types, only values
+                             for these types are returned.
+        filepath(str): filepath for the csv with the NOAA climate data.
 
-def read_file(element_type, filepath):
+    Yields:
+        A three tuple with [0]station, [1]element type, [3]data dictionary
+    """
     flag_codes = {
         "": 0, "D": 1, "G": 2, "I": 3, "K": 4, "L": 5, "M": 6, "N": 7, "O": 8,
         "R": 9, "S": 10, "T": 11, "W": 12, "X": 13, "Z": 14
     }
-    values_all_stations = {}
-    conversion = {"TMAX": 0.1, "TMIN": 0.1, "TAVG": 0.1, "PRCP": 0.1,
-                  "SNWD": 1, "SNOW": 1, "EVAP": 0.1}[element_type]
-    print("reading", filepath, element_type)
+    conversions = {"TMAX": 0.1, "TMIN": 0.1, "TAVG": 0.1, "PRCP": 0.1,
+                  "SNWD": 1, "SNOW": 1, "EVAP": 0.1}
+    logger.debug("reading %s for data types: %s",
+                 filepath, ', '.join(codes))
     with open(filepath, 'r') as current_file:
         for line in current_file:
-            line = line.strip('\n').split(',')
-            # [0] ID = 11 character station identification code
-            # [1] YEAR/MONTH/DAY = 8 character date in YYYYMMDD format
-            #     (e.g. 19860529 = May 29, 1986)
-            # [2] ELEMENT = 4 character indicator of element type
-            # [3] DATA VALUE = 5 character data value for ELEMENT
-            # [4] M-FLAG = 1 character Measurement Flag
-            # [5] Q-FLAG = 1 character Quality Flag
-            # [6] S-FLAG = 1 character Source Flag
-            # [7] OBS-TIME = 4-character time of observation in hour-minute
-            #     format (i.e. 0700 =7:00 am)
-            #
-            # Q-FLAG CODES:
-            # [0] Blank = did not fail any quality assurance check
-            # [1]   D   = failed duplicate check
-            # [2]   G   = failed gap check
-            # [3]   I   = failed internal consistency check
-            # [4]   K   = failed streak/frequent-value check
-            # [5]   L   = failed check on length of multiday period
-            # [6]   M   = failed megaconsistency check
-            # [7]   N   = failed naught check
-            # [8]   O   = failed climatological outlier check
-            # [9]   R   = failed lagged range check
-            # [10]  S   = failed spatial consistency check
-            # [11]  T   = failed temporal consistency check
-            # [12]  W   = temperature too warm for snow
-            # [13]  X   = failed bounds check
-            # [14]  Z   = flagged as a result of an official Datzilla
-            #             investigation
+            station, date_, element_type, value, _, flag, _, time_ = \
+                line.strip('\n').split(',')
 
-            if line[7]:
+            if time:
                 date_time = datetime.datetime(
-                    *[int(x) for x in [line[1][:4], line[1][4:6], line[1][6:8],
-                                       int(line[7][:2]) % 24, line[7][2:]]]
+                    *[int(x) for x in [date_[:4], date_[4:6], date_[6:8],
+                                       int(time_[:2]) % 24, time_[2:]]]
                 )
             else:
                 date_time = datetime.datetime(
-                    *[int(x) for x in [line[1][:4], line[1][4:6], line[1][6:8]]
-                      ])
-            if line[2] == element_type:
-                values = values_all_stations.get(line[0], [])
-                values.append({
+                    *[int(x) for x in [date_[:4], date_[4:6], date_[6:8]]])
+            if element_type in codes:
+                conversion = conversions[element_type]
+                value = None if delete_values else str(int(value) * conversion)
+                yield station, element_type, {
                     "datetime": date_time,
-                    "value": str(int(line[3]) * conversion),
-                    "flag": flag_codes[line[5]]
-                })
-                values_all_stations[line[0]] = values
-        return values_all_stations
-
-
-# station_locations = {
-#     "Can Tho": ("Can_Tho", (
-#         587471.5011,
-#         1109089.8358))
+                    "value": value,
+                    "flag": flag_codes[flag]
+                }
 
 
 def parse_headers(elem_type, param_units,
@@ -383,53 +171,93 @@ def parse_headers(elem_type, param_units,
     return headers, station_locations
 
 
-def read_files(element_types=ELEMENT_TYPES, data_dir="data",
-               first_year=FIRST_YEAR, last_year=None):
-    filepaths = iter(grab_files(data_dir, first_year, last_year))
-    for filepath in filepaths:
-        for element_type in element_types:
-            for value in read_file(element_type, filepath):
-                pass
-        os.remove(filepath)
+# DEPRECATED! / Refactor for creating locations /
+# def to_pixml(file_path_source, file_path_target, element_types=ELEMENT_TYPES,
+#              element_type_units=ELEMENT_TYPE_UNITS):
+#     for element_type in element_types:
+#         print('Creating pixml for', element_type)
+#         values = read_file(element_type, file_path_source)
+#         headerdicts, _ = parse_headers(element_type,
+#                                     element_type_units[element_type])
+#         pixml.create(headerdicts, values,
+#                      filename=file_path_target + element_type + ".xml",
+#                      timeZone=0.0)
+
+def load_historical_data(
+        first_year, last_year, data_dir="data", codes=CONFIG['codes'],
+        units=CONFIG['units'], break_on_error=False):
+    """Load all NOAA data from first_year to last_year."""
+    for year in range(first_year, last_year + 1):
+        # get data csv
+        filename = str(year) + ".csv.gz"
+        file_path = ftp.grab_file(filename=filename, unzip_tar=False)
+        parse_file(file_path, data_dir, codes, units,
+                   break_on_error)
+    if last_year == datetime.date.today().year:
+        command.touch_config()
 
 
-def to_pixml(file_path_source, file_path_target, element_types=ELEMENT_TYPES,
-             element_type_units=ELEMENT_TYPE_UNITS):
-    for element_type in element_types:
-        print('Creating pixml for', element_type)
-        values = read_file(element_type, file_path_source)
-        headerdicts, _ = parse_headers(element_type,
-                                    element_type_units[element_type])
-        pixml.create(headerdicts, values,
-                     filename=file_path_target + element_type + ".xml",
-                     timeZone=0.0)
+def superghcnd_filelist():
+    available_files = ftp.listdir(ftp_dir='/pub/data/ghcn/daily/superghcnd/',
+                              config=CONFIG)
+
+    start = datetime.datetime.strptime(CONFIG['last_value_timestamp'],
+                                       '%Y-%m-%d')
+    date_range = (
+        ((start + datetime.timedelta(days=y)).strftime('%Y%m%d'),
+         (start + datetime.timedelta(days=y + 1)).strftime('%Y%m%d'))
+        for y in range((datetime.datetime.now() - start).days + 1)
+    )
+    files = ('superghcnd_diff_{f}_to_{t}.tar.gz'.format(f=from_, t=to_)
+             for from_, to_ in date_range)
+    for file in files:
+        if not file in available_files:
+            try:
+                raise FileNotFoundError('File %s not found on ftp.' % file)
+            except FileNotFoundError:
+                logger.exception('File %s not found on ftp.', file)
+                raise
+        yield file
+
+
+def grab_recent(codes=CONFIG['codes'], data_dir="data",
+                element_type_units=CONFIG['units'],
+                break_on_error=False):
+    for file in superghcnd_filelist():
+        file_paths = ftp.grab_file(
+            file, ftp_dir='/pub/data/ghcn/daily/superghcnd/')
+        for file_path in file_paths:
+            delete_values = 'delete' in file_path
+            parse_file(file_path, data_dir, codes, element_type_units,
+                       break_on_error, delete_values=delete_values)
+    command.touch_config()
 
 
 def main():
-    # pprint('test grabbing file')
-    # grab_file()
-    # pprint('test finished')
-    parse_year(2009, element_types=['EVAP'])
-    parse_year(2010, element_types=['EVAP'])
+    args = command.argparser(CONFIG)
 
-    print('YEARS 2010 & 2009 EVAP HAVE BEEN PARSED')
+    last_value_days_till_now = (
+        datetime.datetime.now() -
+        datetime.datetime.strptime(CONFIG['last_value_timestamp'], '%Y-%m-%d')
+    ).days
 
-    for year in range(2000, 2016):
-        if year in (2009, 2010):
-            continue
-        parse_year(year, element_types=['EVAP'])
-    # grab_file()
-    # dd = "/home/roel/Documents/Projecten/G4AW/"
-    # fn = "2015.csv"
-    # fp_s = "/home/roel/Documents/Projecten/G4AW/2015.csv"
-    # fp_t = "/home/roel/Documents/Projecten/G4AW/NOAA_2015"
-    # to_pixml(fp_s, fp_t, element_types=['EVAP'])
-    # _, station_locations = parse_headers("", param_units={"parameterId": "WNS1923", "units": "oC"},
-    #               ghcnd_stations_filepath='ghcnd-stations.txt')
-    # import_shape.create_measuringstation_import_zip(
-    #     station_locations, asset_name="MeasuringStation", station_type=3,
-    #     prefix="", frequency="daily", category="NOAA",
-    #     file_path='asset_import_file2')
+    if args.start_year:
+        logger.info('Start year found, grabbing data yearly from %s to %s for '
+                    'element types: %s', args.start_year, args.end_year,
+                    args.codes.replace(',', ', '))
+        load_historical_data(args.start_year,
+                             args.end_year,
+                             data_dir="data",
+                             codes=args.codes,
+                             units=CONFIG['units'],
+                             break_on_error=False)
+        return
+    elif last_value_days_till_now < 365:
+        logger.info('Collecting data from %s till now',
+                    CONFIG['last_value_timestamp'])
+        grab_recent(args.codes)
+    else:
+        logger.info('Nothing done.')
 
 
 if __name__ == "__main__":
