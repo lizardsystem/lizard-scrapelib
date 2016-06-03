@@ -18,7 +18,7 @@ except ImportError:
 logger = command.setup_logger(__name__)
 
 
-def grab_file(filename, ftp_url, ftp_dir, port=21, username="anonymous",
+def grab_file(filename, ftp_url, ftp_dir, port="21", username="anonymous",
               password="", download_dir='data', unzip_gzip=True,
               unzip_tar=True):
     """Grabs file from ftp and ungzips it."""
