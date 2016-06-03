@@ -190,6 +190,7 @@ def load_historical_data(
         # get data csv
         filename = str(year) + ".csv.gz"
         file_path = ftp.grab_file(ftp_url="ftp.ncdc.noaa.gov",
+                                  ftp_dir='/pub/data/ghcn/daily/by_year/',
                                   filename=filename,
                                   unzip_tar=False)
         parse_file(file_path, data_dir, codes, units,
