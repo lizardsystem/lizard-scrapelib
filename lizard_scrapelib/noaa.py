@@ -1,7 +1,5 @@
 import datetime
 import os
-import time
-import urllib.error
 
 try:
     from pyftpclient import PyFTPclient
@@ -18,50 +16,11 @@ except ImportError:
     from lizard_scrapelib.utils import lizard
     from lizard_scrapelib.utils import pixml
 
-import lizard_connector
 
 
 # Start logger and read configuration
 logger = command.setup_logger(__name__)
 CONFIG = command.read_config('noaa')
-
-
-def parse_file(file_path, data_dir="data", codes=CONFIG['codes'],
-               units=CONFIG['units'], break_on_error=False,
-               delete_values=False):
-    """Uploads a year of data into the Lizard-api for given element types."""
-    timeseries = lizard_connector.connector.Endpoint(
-        username=CONFIG['login']['username'],
-        password=CONFIG['login']['password'],
-        base=CONFIG['lizardbase'],
-        endpoint='timeseries')
-    timeseries_uuids = {}
-
-    for location_name, code, data in read_file(
-            codes, file_path, delete_values):
-        # get uuid for timeseries and store uuid to dict.
-        uuid = timeseries_uuids.get(
-            ('NOAA_' + location_name, code),
-             lizard.find_timeseries(location_name='NOAA_' + location_name,
-                                    config=CONFIG,
-                                    code=code,
-                                    timeseries_uuids=timeseries_uuids))
-        if uuid:
-            try:
-                logger.info('location %s | code %s | uuid %s has data: %s',
-                            location_name, code, uuid, str(data))
-                reaction = timeseries.upload(uuid=uuid, data=[data])
-                logger.info('location %s | code %s responds after sending '
-                            'data: %s',location_name, code, str(reaction))
-            except urllib.error.HTTPError as http_error:
-                logger.exception(
-                    'Error in data found when submitting timeseries '
-                    'data. Station: %s, element_type: %s',
-                    location_name, code)
-                time.sleep(10)
-                if break_on_error:
-                    raise
-    os.remove(file_path)
 
 
 def read_file(codes, filepath, delete_values=False):
@@ -130,7 +89,8 @@ def read_file(codes, filepath, delete_values=False):
             if element_type in codes:
                 conversion = conversions[element_type]
                 value = None if delete_values else float(value) * conversion
-                yield station, element_type, {
+                station = "NOAA_" + station
+                yield station, station + "#" + element_type, {
                     "datetime": date_time.isoformat() + 'Z',
                     "value": value,
                     "flag": flag_codes[flag]
@@ -183,8 +143,7 @@ def read_file(codes, filepath, delete_values=False):
 #                      timeZone=0.0)
 
 def load_historical_data(
-        first_year, last_year, data_dir="data", codes=CONFIG['codes'],
-        units=CONFIG['units'], break_on_error=False):
+        first_year, last_year, codes=CONFIG['codes'], break_on_error=False):
     """Load all NOAA data from first_year to last_year."""
     for year in range(first_year, last_year + 1):
         # get data csv
@@ -193,8 +152,9 @@ def load_historical_data(
                                   ftp_dir='/pub/data/ghcn/daily/by_year/',
                                   filename=filename,
                                   unzip_tar=False)
-        parse_file(file_path, data_dir, codes, units,
-                   break_on_error)
+        iterator = read_file(codes, file_path, delete_values=False)
+        lizard.upload_timeseries_data(CONFIG, iterator, break_on_error)
+        os.remove(file_path)
     if last_year == datetime.date.today().year:
         command.touch_config()
 
@@ -223,9 +183,7 @@ def superghcnd_filelist():
         yield file
 
 
-def grab_recent(codes=CONFIG['codes'], data_dir="data",
-                element_type_units=CONFIG['units'],
-                break_on_error=False):
+def grab_recent(codes=CONFIG['codes'], break_on_error=False):
     for file in superghcnd_filelist():
         file_paths = ftp.grab_file(
             file,
@@ -236,8 +194,9 @@ def grab_recent(codes=CONFIG['codes'], data_dir="data",
             delete_values = 'delete' in file_path
             if delete_values:
                 logger.debug('deleting from: %s', file_path)
-            parse_file(file_path, data_dir, codes, element_type_units,
-                       break_on_error, delete_values=delete_values)
+            iterator = read_file(codes, file_path, delete_values=False)
+            lizard.upload_timeseries_data(CONFIG, iterator, break_on_error)
+            os.remove(file_path)
     command.touch_config()
 
 
@@ -256,9 +215,7 @@ def main():
                     args.codes)
         load_historical_data(args.start_year,
                              args.end_year,
-                             data_dir="data",
                              codes=args.codes,
-                             units=CONFIG['units'],
                              break_on_error=False)
         return
     elif last_value_days_till_now < 365:

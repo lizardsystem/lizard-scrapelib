@@ -1,4 +1,6 @@
 {
+  "name": "noaa",
+  "organisation_code_filter": true,
   "last_value_timestamp": "1900-01-01",
   "lizardbase": "https://demo.lizard.net",
   "codes": ["TMAX", "TMIN", "TAVG", "PRCP", "SNWD", "SNOW", "EVAP"],

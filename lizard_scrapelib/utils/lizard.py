@@ -1,3 +1,4 @@
+import time
 import urllib.error
 
 import lizard_connector
@@ -11,18 +12,15 @@ except ImportError:
 logger = command.setup_logger(__name__)
 
 
-def loc_code(name, code):
-    return name + (("#" + code) if code else '')
-
-
-def endpoint(config, endpoint_type):
+def endpoint(config, name):
     return lizard_connector.connector.Endpoint(
-        username=config['login']['username'], password=config['login'][
-            'password'],
-        base=config['lizardbase'], endpoint=endpoint_type)
+        username=config['login']['username'],
+        password=config['login']['password'],
+        base=config['lizardbase'],
+        endpoint=name)
 
 
-def find_location(location_name, config, code=''):
+def find_location(location_name, config, organisation_code):
     """
     Finds a timeseries location based on a station and element_type.
 
@@ -38,22 +36,22 @@ def find_location(location_name, config, code=''):
     try:
         # query for station in locations and element type
         result = timeseries_location.download(name=location_name)
-        code_ = loc_code(location_name, code)
-        result = [r for r in result if r['organisation_code'] == code_]
+        result = [r for r in result if
+                  r['organisation_code'] == organisation_code]
         try:
             # multiple results are (should) not (be) possible
             return result[0].get('uuid')
         except IndexError:
             logger.debug('Could not find location with %s and organisation '
-                         'code part: %s', location_name, code)
+                         'code part: %s', location_name, organisation_code)
             return None
     except urllib.error.HTTPError:
         return None
 
 
 @command.store_to_dict(dict_name='timeseries_uuids',
-                       dict_key_name=('location_name', 'code'))
-def find_timeseries(location_name, config, code=''):
+                       dict_key_name=('location_name', 'timeseries_name'))
+def find_timeseries(location_name, timeseries_name, config):
     """
     Find timeseries for a station and element type.
 
@@ -65,54 +63,55 @@ def find_timeseries(location_name, config, code=''):
     try:
         # query for station and element type
         result = timeseries.download(location__name=location_name)
-        code_ = loc_code(location_name, code)
-        result = [r for r in result if
-                  r['location']['organisation_code'] == code_]
+        if config.get('organisation_code_filter', True):
+            result = [r for r in result if
+                      r['location']['organisation_code'] == timeseries_name]
         try:
             # multiple results are (should) not (be) possible
             return result[0].get('uuid')
         except IndexError:
             # No timeseries found yet, log it, and create a new one.
             logger.debug('Could not find timeseries for location %s and '
-                         'organisation code part: %s', location_name, code)
+                         'organisation code: %s', location_name,
+                         timeseries_name)
             pass
     except urllib.error.HTTPError:
         pass
     # find the location to create a new timeseries for
-    location_uuid = find_location(location_name, config, code)
+    location_uuid = find_location(location_name, config, timeseries_name)
     if location_uuid:
         try:
             timeseries_uuid = create_timeseries(
-                config, location_name, location_uuid, code=code,
-                unit=config['units'][code]['parameterId'])
+                config, location_name, location_uuid, timeseries_name=timeseries_name,
+                unit=config['units'][timeseries_name.split('#')[-1]]['parameterId'])
             return timeseries_uuid
         except urllib.error.HTTPError:
             logger.exception("Could not create timeseries with location_name "
-                             "= %s, code = %s and location_uuid = %s",
-                             location_name, code, location_uuid)
+                             "= %s, timeseries_name = %s and location_uuid = %s",
+                             location_name, timeseries_name, location_uuid)
             return None
-    logger.info('Timeseries not created for location %s and organisation code'
-                'part: %s', location_name, code)
+    logger.info('Timeseries not created for location %s and timeseries name: '
+                '%s', location_name, timeseries_name)
     return None
 
 
-def create_timeseries(config, location_name, location_uuid, code="", unit=None,
-                      access_modifier=100, supplier=None, value_type=1):
+def create_timeseries(config, location_name, location_uuid, timeseries_name,
+                      unit=None, access_modifier=100, supplier=None,
+                      value_type=1):
     timeseries = endpoint(config, 'timeseries')
-    id_ = location_name + '#' + code
     timeseries_header = {
-        "name": id_,
+        "name": timeseries_name,
         "location": location_uuid,
-        "organisation_code": id_,
+        "organisation_code": timeseries_name,
         "access_modifier": access_modifier,
-        "supplier_code": loc_code(location_name, code),
+        "supplier_code": timeseries_name,
         "supplier": supplier,
         "parameter_referenced_unit": unit,
         "value_type": value_type
     }
     # create new timeseries:
-    logger.info('Creating new timeseries with name: %s and code: %s',
-                location_name, code)
+    logger.info('Creating new timeseries with location name: %s and name: %s',
+                location_name, timeseries_name)
     new_timeseries_info = timeseries.upload(data=timeseries_header)
     timeseries_uuid = new_timeseries_info['uuid']
     logger.info('New timeseries created with uuid: %s', timeseries_uuid)
@@ -128,7 +127,7 @@ def create_location(config, location_name, code, lon=None, lat=None,
     location_data = {
         "name": location_name,
         "organisation": config['login']['organisation'],
-        "organisation_code": loc_code(location_name, code),
+        "organisation_code": location_name + ("#" + code) if code else '',
         "geometry": geometry,
         "access_modifier": access_modifier,
         "ddsc_show_on_map": ddsc_show_on_map,
@@ -139,6 +138,72 @@ def create_location(config, location_name, code, lon=None, lat=None,
     uuid = location_info['uuid']
     logger.info('New timeseries created with uuid: %s', uuid)
     return uuid
+
+
+def find_timeseries_uuids(config):
+    uuids = {}
+    timeseries = endpoint(config, 'timeseries')
+    timeseries.max_results = 10000000
+    timeseries.all_pages = False
+    added = 0
+    for result in timeseries.download(
+            location__name__startswith=config['name'].upper(), page_size=2500):
+        uuids.update(
+            {(x['location']['name'], x['name']): x['uuid'] for x in result})
+        count = int(timeseries.count)
+        added = max(2500 + added, count)
+        logger.debug('Collecting timeseries uuids. %s done',
+                     "{:5.1f}%".format(added / count))
+    return uuids
+
+
+def upload_timeseries_data(config, timeseries_data, break_on_error=False):
+    """
+    Uploads a year of data into the Lizard-api for given element types.
+
+    Args:
+        config(dict): dictionary from config json. See var/config for example
+            json, or load config through:
+            lizard_scrapelib.utils.command.read_config(name)
+        timeseries_data(iterable): iterable of the form
+                                   ((
+                                      location_name,
+                                      code,
+                                      {
+                                         'datetime': iso formatted datetime,
+                                         'value': value
+                                      }
+                                   ), ... )
+                                   optionally the data also has a 'flag' value.
+
+    """
+    timeseries = endpoint(config, 'timeseries')
+    timeseries_uuids = find_timeseries_uuids(config)
+
+    for location_name, timeseries_name, data in timeseries_data:
+        # get uuid for timeseries and store uuid to dict.
+        code = timeseries_name.split('#')[-1]
+        uuid = timeseries_uuids.get(
+            (location_name, timeseries_name),
+            find_timeseries(location_name=location_name,
+                            timeseries_name=timeseries_name,
+                            config=config,
+                            timeseries_uuids=timeseries_uuids))
+        if uuid:
+            try:
+                logger.info('location %s | code %s | uuid %s has data: %s',
+                            location_name, code, uuid, str(data))
+                reaction = timeseries.upload(uuid=uuid, data=[data])
+                logger.info('location %s | code %s responds after sending '
+                            'data: %s',location_name, code, str(reaction))
+            except urllib.error.HTTPError:
+                logger.exception(
+                    'Error in data found when submitting timeseries '
+                    'data. Station: %s, element_type: %s',
+                    location_name, code)
+                time.sleep(10)
+                if break_on_error:
+                    raise
 
 
 def lizard_create_commands():
@@ -183,7 +248,12 @@ def lizard_create_commands():
                          args.lizard_backend, location_uuid, args.name,
                          args.code, unit, args.access_modifier)
             timeseries_uuid = create_timeseries(
-                config, args.name, location_uuid, args.code, unit,
+                config,
+                location_name=args.name,
+                location_uuid=location_uuid,
+                timeseries_name=(args.name + "#" + args.code) if
+                                args.code else args.name,
+                unit=unit,
                 access_modifier=args.access_modifier)
             logger.info('Created timeseries %s with uuid %s and location uuid '
                         '%s in backend %s', args.name, timeseries_uuid,

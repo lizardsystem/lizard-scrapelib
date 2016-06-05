@@ -247,7 +247,8 @@ def argparser(config):
         else:
             debuglevel = logging.INFO
 
-        log_filename = os.path.join(FILE_BASE, "var/log/sturing.log")
+        log_filename = os.path.join(FILE_BASE, "var/log/" + config['name'] +
+                                    ".log")
         logging.basicConfig(
             filename=log_filename,
             level=debuglevel,
