@@ -1,16 +1,21 @@
 import ftplib
 import os
 
+import pysftp
+
+try:
+    from pyftpclient import PyFTPclient
+except ImportError:
+    from lizard_scrapelib.pyftpclient import PyFTPclient
+
 try:
     import handlers
     import command
-    from pyftpclient import PyFTPclient
 except ImportError:
     try:
         from utils import handlers
         from utils import command
     except ImportError:
-        from lizard_scrapelib.pyftpclient import PyFTPclient
         from lizard_scrapelib.utils import handlers
         from lizard_scrapelib.utils import command
 
@@ -18,17 +23,29 @@ except ImportError:
 logger = command.setup_logger(__name__)
 
 
-def grab_file(filename, ftp_url, ftp_dir, port="21", username="anonymous",
+def upload_file(file_path, ftp_url, ftp_dir, username="anonymous",
+                password=""):
+    print('Storing: %s to %s', file_path, ftp_url)
+    logger.debug('Storing: %s to %s', file_path, ftp_url)
+    with pysftp.Connection(ftp_url, username=username, password=password) \
+            as sftp:
+        with sftp.cd(ftp_dir):
+            sftp.put(file_path)
+
+
+def grab_file(filename, ftp_url, ftp_dir, port=21, username="anonymous",
               password="", download_dir='data', unzip_gzip=True,
-              unzip_tar=True):
+              unzip_tar=True, encoding="utf-8"):
     """Grabs file from ftp and ungzips it."""
     logger.info('grabbing from ftp %s', filename)
     file_path = os.path.join(download_dir, filename)
-    ftp_client = PyFTPclient(ftp_url, username, port, password)
+    print(port)
+    print(type(port))
+    ftp_client = PyFTPclient(ftp_url, port, username, password)
     ftp_client.DownloadFile(filename, file_path, ftp_dir)
     logger.debug('file grabbed from ftp, unzipping')
     if unzip_gzip:
-        file_path = handlers.ungzip(file_path, remove=True)
+        file_path = handlers.ungzip(file_path, remove=True, encoding=encoding)
         if unzip_tar:
             file_path = handlers.untar(file_path, download_dir)
         logger.debug('unzipped file: %s', str(file_path))

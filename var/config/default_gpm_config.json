@@ -1,0 +1,29 @@
+{
+  "last_value_timestamp": "2015-03-07",
+  "original_position": "2015-03-07T00:29",
+  "lizardbase": "https://demo.lizard.net",
+  "ftp_from": "jsimpson.pps.eosdis.nasa.gov",
+  "ftp_to": "ftp.ddsc.nl",
+  "ftp_to_dir": "ftp/roel_edit/gpm",
+  "data_dir": "data/gpm/",
+  "lizard_slug": "GPM_WORLD_RAIN",
+  "commandline_args": {
+    "description": "Collects world rainfall radar data from NASA and adds this to Lizard. Data are 30 minute values .",
+    "args": [
+      "verbose",
+      "start",
+      "end",
+      "password",
+      "username",
+      "ftp_password",
+      "ftp_username",
+      "data_dir"
+    ]
+  },
+  "login": {  // TODO: fill in login info!
+    "username": "",  // TODO: this should be the Lizard login username
+    "password": "",  // TODO: this should be the Lizard login password
+    "ftp_username": "",  // TODO: this should be the nasa login username
+    "ftp_password": "",  // TODO: this should be the nasa login password
+  }
+}

@@ -13,8 +13,9 @@ install_requires = [
     'ciso8601',
     'lizard-connector',
     'lxml',
-    'setuptools',
+    'pysftp',
     'rasterstats',
+    'setuptools',
     ],
 
 setup(name='lizard-scrapelib',
@@ -37,6 +38,7 @@ setup(name='lizard-scrapelib',
       entry_points={
           'console_scripts': [
               'noaa = lizard_scrapelib.noaa:main',
+              'gpm = lizard_scrapelib.gpm:main',
               'mekong = lizard_scrapelib.mekong:main',
               'et0 = lizard_scrapelib.modis_et:main',
               'lizard_create = lizard_scrapelib.utils.lizard:lizard_create_commands'

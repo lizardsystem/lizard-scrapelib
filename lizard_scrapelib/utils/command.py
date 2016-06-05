@@ -20,6 +20,7 @@ logger = setup_logger(__name__)
 
 
 def read_config(name):
+    name = name.split(r'.')[-1]
     with open(os.path.join(FILE_BASE, 'var/config/{name}_config.json'.format(
             name=name)), 'r') as cfg:
         return json.load(cfg)
@@ -74,6 +75,26 @@ def argparser(config):
                         "production.",
                 "default": "production"
             }},
+        "start": {
+            "args": ['-S', '--start'],
+            "kwargs": {
+                "help": "Starting date (isoformat with dashes: 2015-03-07) "
+                        "of period of the data to be collected. If this is "
+                        "not set, default behaviour is to fill the database "
+                        "based on the last known value for a fixed set of "
+                        "timeseries. If the database hasn't been filled "
+                        "before, the start date of the GPM dataset will be "
+                        "chosen: 2015-03-07",
+                "default": None
+            }},
+        "end": {
+            "args": ['-E', '--end'],
+            "kwargs": {
+                "help": "Last date (isoformat with dashes: 2015-03-07) of "
+                        "period of the data to be collected. Defaults to "
+                        "today.",
+                "default": datetime.date.today().isoformat()
+            }},
         "start_year": {
             "args": ['-s', '--start_year'],
             "kwargs": {
@@ -100,7 +121,7 @@ def argparser(config):
                 "default": codes
             }},
         "pixml": {
-            "args": ['-P', '--pixml'],
+            "args": ['-X', '--pixml'],
             "kwargs": {
                 "help": "Creates PiXML from data, but doesn't store data in "
                         "the Lizard Backend.",
@@ -116,6 +137,18 @@ def argparser(config):
             "args": ['-u', '--username'],
             "kwargs": {
                 "help": "Username for the Lizard API.",
+                "default": None
+            }},
+        "ftp_password": {
+            "args": ['-P', '--ftp_password'],
+            "kwargs": {
+                "help": "Password for the ftp server.",
+                "default": None
+            }},
+        "ftp_username": {
+            "args": ['-U', '--ftp_username'],
+            "kwargs": {
+                "help": "Username for the ftp server.",
                 "default": None
             }},
         "organisation": {
@@ -161,6 +194,12 @@ def argparser(config):
                         "object. Defaults to 100.",
                 "default": 100
             }},
+        "data_dir": {
+            "args": ['-D', '--data_dir'],
+            "kwargs": {
+                "help": "path of the data_directory",
+                "default": config.get('data_dir', 'data')
+            }},
     }
 
     parser = argparse.ArgumentParser(
@@ -176,8 +215,14 @@ def argparser(config):
 
     if 'password' in commandline_args and 'username' in commandline_args:
         if not args.password or not args.username:
-            parser.password = login.get('password', '')
-            parser.username = login.get('username', '')
+            args.password = login.get('password', '')
+            args.username = login.get('username', '')
+
+    if 'ftp_password' in commandline_args and 'ftp_username' in \
+            commandline_args:
+        if not args.ftp_password or not args.ftp_username:
+            args.ftp_password = login.get('ftp_password', '')
+            args.ftp_username = login.get('ftp_username', 'anomymous')
 
     if 'lizard_backend' in commandline_args:
         if args.lizard_backend != 'production':

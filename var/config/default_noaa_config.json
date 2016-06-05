@@ -24,8 +24,10 @@
     ]
   },
   "login": {
-    "username": "",
-    "password": "",
-    "organisation": "6f666b72c10942c493afe81a322f811c"
+    "username": "",  // TODO: this should be the Lizard login username
+    "password": "",  // TODO: this should be the Lizard login password
+    "ftp_username": "anonymous",
+    "ftp_password": "",
+    "organisation": ""  // TODO: this should be the Lizard organisation the data belongs to
   }
 }

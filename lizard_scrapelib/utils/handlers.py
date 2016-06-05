@@ -8,8 +8,11 @@ def ungzip(filename, remove=False, encoding='utf-8'):
     """Ungzips a file."""
     zipped = gzip.GzipFile(filename=filename, mode='rb')
     new_filename = re.sub('\.gz$', '', filename)
-    with open(new_filename, 'w') as new_file:
-        new_file.write(zipped.read().decode(encoding))
+    with open(new_filename, 'w' if encoding else 'wb') as new_file:
+        if encoding:
+            new_file.write(zipped.read().decode(encoding))
+        else:
+            new_file.write(zipped.read())
     if remove:
         os.remove(filename)
     return new_filename
