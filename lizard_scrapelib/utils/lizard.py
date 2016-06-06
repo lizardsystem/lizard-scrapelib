@@ -148,7 +148,7 @@ def find_timeseries_uuids(config):
     added = 0
     try:
         for result in timeseries.download(
-                location__name__startswith=config['name'].upper(), page_size=2500):
+                location__name__startswith=config['name'].upper(), page_size=250):
             previous_url = timeseries.next_url
             uuids.update(
                 {(x['location']['name'], x['name']): x['uuid'] for x in result})
