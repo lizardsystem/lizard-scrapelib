@@ -156,9 +156,9 @@ def find_timeseries_uuids(config):
             uuids.update(
                 {(x['location']['name'], x['name']): x['uuid'] for x in result})
             count = int(timeseries.count)
-            added = max(2500 + added, count)
+            added = min(1000 + added, count)
             logger.debug('Collecting timeseries uuids. %s done',
-                         "{:5.1f}%".format(added / count))
+                         "{:5.2f}%".format(added / count))
         except urllib.error.HTTPError:
             logger.exception("Couldn't get all uuids, currently at try: %d. "
                              "url was: %s , previous url was: %s.", tries,
