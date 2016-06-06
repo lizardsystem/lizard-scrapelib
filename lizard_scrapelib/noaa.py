@@ -186,7 +186,7 @@ def parse_dly(file_path, element, from_date):
                     from_date:
                 values = [None] + [(int(line[x:x+5]) * conversion, line[x+6])
                                    for x in range(21, 269, 8)]
-                total_data += [{"datetime": day.isoformat() + 'Z',
+                total_data += [{"datetime": day.isoformat() + 'T00:00:00Z',
                                 "value": values[day.day][0],
                                 "flag": CONFIG["flag_codes"][values[day.day][1]]}
                                for day in
