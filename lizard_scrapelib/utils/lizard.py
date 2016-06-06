@@ -191,11 +191,11 @@ def upload_timeseries_data(config, timeseries_data, timeseries_uuids,
                             timeseries_uuids=timeseries_uuids))
         if uuid:
             try:
-                logger.info('location %s | code %s | uuid %s has data: %s',
-                            location_name, code, uuid, str(data))
-                reaction = timeseries.upload(uuid=uuid, data=[data])
-                logger.info('location %s | code %s responds after sending '
-                            'data: %s',location_name, code, str(reaction))
+                logger.debug('location %s | code %s | uuid %s has data',
+                            location_name, code, uuid)
+                timeseries.upload(uuid=uuid, data=[data])
+                logger.debug('Sending data to location %s | code %s succeeds.',
+                             location_name, code)
             except urllib.error.HTTPError:
                 logger.exception(
                     'Error in data found when submitting timeseries '
