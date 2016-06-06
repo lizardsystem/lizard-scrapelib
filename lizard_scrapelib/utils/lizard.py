@@ -146,21 +146,29 @@ def find_timeseries_uuids(config):
     timeseries.max_results = 10000000
     timeseries.all_pages = False
     added = 0
-    try:
-        for result in timeseries.download(
-                location__name__startswith=config['name'].upper(), page_size=250):
-            previous_url = timeseries.next_url
+    tries = 0
+    timeseries.download(
+                location__name__startswith=config['name'].upper(), page_size=250)
+    while tries < 10 and timeseries.next_url:
+        previous_url = timeseries.next_url
+        try:
+            result = next(timeseries)
             uuids.update(
                 {(x['location']['name'], x['name']): x['uuid'] for x in result})
             count = int(timeseries.count)
             added = max(2500 + added, count)
             logger.debug('Collecting timeseries uuids. %s done',
                          "{:5.1f}%".format(added / count))
-    except urllib.error.HTTPError:
-        logger.exception("Couldn't get all uuids, stopped at: %s. Previous "
-                         "was: %s.", timeseries.next_url, previous_url)
-    finally:
-        return uuids
+        except urllib.error.HTTPError:
+            logger.exception("Couldn't get all uuids, currently at try: %d. "
+                             "url was: %s , previous url was: %s.", tries,
+                             timeseries.next_url, previous_url)
+            timeseries.next_url = previous_url
+            tries += 1
+            time.sleep(60)
+        except StopIteration:
+            return uuids
+    return uuids
 
 
 def upload_timeseries_data(config, timeseries_data, timeseries_uuids,
