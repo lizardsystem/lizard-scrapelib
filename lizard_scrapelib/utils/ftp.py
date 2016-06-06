@@ -38,9 +38,7 @@ def grab_file(filename, ftp_url, ftp_dir, port=21, username="anonymous",
               unzip_tar=True, encoding="utf-8"):
     """Grabs file from ftp and ungzips it."""
     logger.info('grabbing from ftp %s', filename)
-    file_path = os.path.join(download_dir, filename)
-    print(port)
-    print(type(port))
+    file_path = os.path.join(command.FILE_BASE, download_dir, filename)
     ftp_client = PyFTPclient(ftp_url, port, username, password)
     ftp_client.DownloadFile(filename, file_path, ftp_dir)
     logger.debug('file grabbed from ftp, unzipping')

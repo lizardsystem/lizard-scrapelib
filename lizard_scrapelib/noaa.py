@@ -1,3 +1,4 @@
+from calendar import Calendar
 import datetime
 import os
 
@@ -65,12 +66,6 @@ def read_file(codes, filepath, delete_values=False):
     Yields:
         A three tuple with [0]station, [1]element type, [3]data dictionary
     """
-    flag_codes = {
-        "": 0, "D": 1, "G": 2, "I": 3, "K": 4, "L": 5, "M": 6, "N": 7, "O": 8,
-        "R": 9, "S": 10, "T": 11, "W": 12, "X": 13, "Z": 14
-    }
-    conversions = {"TMAX": 0.1, "TMIN": 0.1, "TAVG": 0.1, "PRCP": 0.1,
-                  "SNWD": 1, "SNOW": 1, "EVAP": 0.1}
     logger.debug("reading %s for data types: %s",
                  filepath, ', '.join(codes))
     with open(filepath, 'r') as current_file:
@@ -87,13 +82,13 @@ def read_file(codes, filepath, delete_values=False):
                 date_time = datetime.datetime(
                     *[int(x) for x in [date_[:4], date_[4:6], date_[6:8]]])
             if element_type in codes:
-                conversion = conversions[element_type]
+                conversion = CONFIG["conversions"][element_type]
                 value = None if delete_values else float(value) * conversion
                 station = "NOAA_" + station
                 yield station, station + "#" + element_type, {
                     "datetime": date_time.isoformat() + 'Z',
                     "value": value,
-                    "flag": flag_codes[flag]
+                    "flag": CONFIG["flag_codes"][flag]
                 }
 
 # DEPRECATED! / Refactor for creating locations /
@@ -142,9 +137,94 @@ def read_file(codes, filepath, delete_values=False):
 #                      filename=file_path_target + element_type + ".xml",
 #                      timeZone=0.0)
 
+
+
+def parse_dly(file_path, element, from_date):
+    """
+    FORMAT OF DATA FILES (".dly" FILES)
+
+    Each ".dly" file contains data for one station.  The name of the file
+    corresponds to a station's identification code.  For example, "USC00026481.dly"
+    contains the data for the station with the identification code USC00026481).
+
+    Each record in a file contains one month of daily data.  The variables on each
+    line include the following:
+
+    ------------------------------
+    Variable   Columns   Type
+    ------------------------------
+    ID            0-11   Character
+    YEAR         11-15   Integer
+    MONTH        15-17   Integer
+    ELEMENT      17-21   Character
+    VALUE1       21-26   Integer
+    MFLAG1       26-27   Character
+    QFLAG1       27-28   Character
+    SFLAG1       29-29   Character
+    VALUE2       30-34   Integer
+    MFLAG2       35-35   Character
+    QFLAG2       36-36   Character
+    SFLAG2       37-37   Character
+      .           .          .
+      .           .          .
+      .           .          .
+    VALUE31    262-266   Integer
+    MFLAG31    267-267   Character
+    QFLAG31    268-268   Character
+    SFLAG31    269-269   Character
+    ------------------------------
+    """
+    total_data = []
+    conversion = CONFIG["conversions"][element]
+    with open(file_path, 'r') as dly_file:
+        month_calendar = Calendar()
+        for line in dly_file:
+            element_ = line[17:21]
+            year = int(line[11:15])
+            month = int(line[15:17])
+            if element == element_ and datetime.datetime(year, month, 1) >= \
+                    from_date:
+                values = [None] + [(int(line[x:x+5]) * conversion, line[x+6])
+                                   for x in range(21, 269, 8)]
+                total_data += [{"datetime": day.isoformat() + 'Z',
+                                "value": values[day.day][0],
+                                "flag": CONFIG["flag_codes"][values[day.day][1]]}
+                               for day in
+                               month_calendar.itermonthdates(year, month) if
+                               values[day.day][0] != -9999 * conversion]
+    station_name = "NOAA_" + line[:11]
+    timeseries_name = station_name + "#" + element
+    return station_name, timeseries_name, total_data
+
+
 def load_historical_data(
         first_year, last_year, codes=CONFIG['codes'], break_on_error=False):
+    locations = lizard.endpoint(CONFIG, 'locations')
+    locations.max_results = 10000000
+    locations.all_pages = False
+    location_names = (x['name'].strip('NOAA_') for l in
+                      locations.download(name__startswith="NOAA_",
+                                         page_size=1000) for x in l )
+    from_date = datetime.datetime(first_year,1,1)
+    timeseries_uuids = lizard.find_timeseries_uuids(CONFIG)
+    for location_name in location_names:
+        file_path = ftp.grab_file(
+            filename=location_name + '.dly',
+            ftp_url="ftp.ncdc.noaa.gov",
+            ftp_dir="pub/data/ghcn/daily/all",
+            unzip_gzip=False,
+            unzip_tar=False)
+        for code in codes:
+            x = [parse_dly(file_path, code, from_date)]
+            lizard.upload_timeseries_data(
+                CONFIG, x, timeseries_uuids, break_on_error=False)
+        os.remove(file_path)
+
+
+def load_historical_data_yearly(
+        first_year, last_year, codes=CONFIG['codes'], break_on_error=False):
     """Load all NOAA data from first_year to last_year."""
+    timeseries_uuids = lizard.find_timeseries_uuids(CONFIG)
     for year in range(first_year, last_year + 1):
         # get data csv
         filename = str(year) + ".csv.gz"
@@ -153,7 +233,8 @@ def load_historical_data(
                                   filename=filename,
                                   unzip_tar=False)
         iterator = read_file(codes, file_path, delete_values=False)
-        lizard.upload_timeseries_data(CONFIG, iterator, break_on_error)
+        lizard.upload_timeseries_data(CONFIG, iterator, timeseries_uuids,
+                                      break_on_error)
         os.remove(file_path)
     if last_year == datetime.date.today().year:
         command.touch_config()
@@ -184,6 +265,7 @@ def superghcnd_filelist():
 
 
 def grab_recent(codes=CONFIG['codes'], break_on_error=False):
+    timeseries_uuids = lizard.find_timeseries_uuids(CONFIG)
     for file in superghcnd_filelist():
         file_paths = ftp.grab_file(
             file,
@@ -195,7 +277,8 @@ def grab_recent(codes=CONFIG['codes'], break_on_error=False):
             if delete_values:
                 logger.debug('deleting from: %s', file_path)
             iterator = read_file(codes, file_path, delete_values=False)
-            lizard.upload_timeseries_data(CONFIG, iterator, break_on_error)
+            lizard.upload_timeseries_data(CONFIG, iterator, timeseries_uuids,
+                                          break_on_error)
             os.remove(file_path)
     command.touch_config()
 

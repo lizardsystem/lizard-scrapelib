@@ -159,7 +159,8 @@ def load_historical_data(
             )
             timeseries_data = (
                 "G4AW_MEKONG " + station, "WNS2186", data_waterlevel)
-            lizard.upload_timeseries_data(CONFIG, timeseries_data)
+            lizard.upload_timeseries_data(CONFIG, timeseries_data,
+                                          timeseries_information)
 
             data_precipitation = list(read_cols(
                 tree=flood_tree,
@@ -170,7 +171,8 @@ def load_historical_data(
             ))
             timeseries_data = (
                 "G4AW_MEKONG " + station, "WNS1400", data_precipitation)
-            lizard.upload_timeseries_data(CONFIG, timeseries_data)
+            lizard.upload_timeseries_data(CONFIG, timeseries_data,
+                                          timeseries_information)
 
         for years in (str(year) + "_" + str(year + 1) for year in
                       range(first_year, last_year + 1) if year > 2012):
@@ -197,7 +199,8 @@ def load_historical_data(
             ))
             timeseries_data = (
                 "G4AW_MEKONG " + station, "WNS2186", data_waterlevel)
-            lizard.upload_timeseries_data(CONFIG, timeseries_data)
+            lizard.upload_timeseries_data(CONFIG, timeseries_data,
+                                          timeseries_information)
 
 
 def create_timeseries_pixml():

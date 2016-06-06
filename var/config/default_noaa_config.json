@@ -1,7 +1,7 @@
 {
   "name": "noaa",
   "organisation_code_filter": true,
-  "last_value_timestamp": "1900-01-01",
+  "last_value_timestamp": "2016-06-01",
   "lizardbase": "https://demo.lizard.net",
   "codes": ["TMAX", "TMIN", "TAVG", "PRCP", "SNWD", "SNOW", "EVAP"],
   "units": {
@@ -13,6 +13,11 @@
     "SNOW": {"parameterId": "WNS1400", "units": "mm"},
     "EVAP": {"parameterId": "VERDPG (mm)", "units": "mm"}
   },
+  "conversions": {"TMAX": 0.1, "TMIN": 0.1, "TAVG": 0.1, "PRCP": 0.1,
+                  "SNWD": 1, "SNOW": 1, "EVAP": 0.1},
+  "flag_codes": {"": 0, " ": 0, "D": 1, "G": 2, "I": 3, "K": 4, "L": 5, "M": 6,
+                 "N": 7, "O": 8, "R": 9, "S": 10, "T": 11, "W": 12, "X": 13,
+                 "Z": 14},
   "commandline_args": {
     "description": "Collects GHCN climate data from NOAA and adds this to Lizard. Data are daily values of, where available, temerature (min, max, mean), precipitation, snowfall and (incidently evaporation (only in the US)).",
     "args": [

@@ -157,7 +157,8 @@ def find_timeseries_uuids(config):
     return uuids
 
 
-def upload_timeseries_data(config, timeseries_data, break_on_error=False):
+def upload_timeseries_data(config, timeseries_data, timeseries_uuids,
+                           break_on_error=False):
     """
     Uploads a year of data into the Lizard-api for given element types.
 
@@ -178,7 +179,6 @@ def upload_timeseries_data(config, timeseries_data, break_on_error=False):
 
     """
     timeseries = endpoint(config, 'timeseries')
-    timeseries_uuids = find_timeseries_uuids(config)
 
     for location_name, timeseries_name, data in timeseries_data:
         # get uuid for timeseries and store uuid to dict.
