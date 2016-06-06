@@ -148,8 +148,8 @@ def find_timeseries_uuids(config):
     added = 0
     tries = 0
     timeseries.download(
-                location__name__startswith=config['name'].upper(), page_size=250)
-    while tries < 10 and timeseries.next_url:
+        location__name__startswith=config['name'].upper(), page_size=1000)
+    while tries < 100 and timeseries.next_url:
         previous_url = timeseries.next_url
         try:
             result = next(timeseries)
@@ -211,13 +211,33 @@ def upload_timeseries_data(config, timeseries_data, timeseries_uuids,
                 logger.debug('Sending data to location %s | code %s succeeds.',
                              location_name, code)
             except urllib.error.HTTPError:
-                logger.exception(
-                    'Error in data found when submitting timeseries '
-                    'data. Station: %s, element_type: %s',
-                    location_name, code)
-                time.sleep(10)
-                if break_on_error:
-                    raise
+                time.sleep(60)
+                try:
+                    logger.debug('location %s | code %s | uuid %s second try '
+                                 'sending data', location_name, code, uuid)
+                    timeseries.upload(uuid=uuid, data=[data])
+                    logger.debug('Sending data to location %s | code %s '
+                                 'succeeds after 1 try.',
+                                 location_name, code)
+                except urllib.error.HTTPError:
+                    time.sleep(60)
+                    try:
+                        logger.debug('location %s | code %s | uuid %s third '
+                                     'try sending data', location_name, code,
+                                     uuid)
+                        timeseries.upload(uuid=uuid, data=[data])
+                        logger.debug('Sending data to location %s | code %s '
+                                     'succeeds after third try.',
+                                     location_name, code)
+                    except urllib.error.HTTPError:
+                        logger.exception(
+                            'Error in data found when submitting timeseries '
+                            'data. Tried three times. Station: %s, '
+                            'element_type: %s',
+                            location_name, code)
+                        time.sleep(10)
+                        if break_on_error:
+                            raise
 
 
 def lizard_create_commands():
