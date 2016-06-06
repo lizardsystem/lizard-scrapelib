@@ -207,7 +207,7 @@ def upload_timeseries_data(config, timeseries_data, timeseries_uuids,
             try:
                 logger.debug('location %s | code %s | uuid %s has data',
                             location_name, code, uuid)
-                timeseries.upload(uuid=uuid, data=[data])
+                timeseries.upload(uuid=uuid, data=data)
                 logger.debug('Sending data to location %s | code %s succeeds.',
                              location_name, code)
             except urllib.error.HTTPError:
@@ -215,7 +215,7 @@ def upload_timeseries_data(config, timeseries_data, timeseries_uuids,
                 try:
                     logger.debug('location %s | code %s | uuid %s second try '
                                  'sending data', location_name, code, uuid)
-                    timeseries.upload(uuid=uuid, data=[data])
+                    timeseries.upload(uuid=uuid, data=data)
                     logger.debug('Sending data to location %s | code %s '
                                  'succeeds after 1 try.',
                                  location_name, code)
@@ -225,7 +225,7 @@ def upload_timeseries_data(config, timeseries_data, timeseries_uuids,
                         logger.debug('location %s | code %s | uuid %s third '
                                      'try sending data', location_name, code,
                                      uuid)
-                        timeseries.upload(uuid=uuid, data=[data])
+                        timeseries.upload(uuid=uuid, data=data)
                         logger.debug('Sending data to location %s | code %s '
                                      'succeeds after third try.',
                                      location_name, code)
