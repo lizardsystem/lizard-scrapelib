@@ -158,7 +158,7 @@ def find_timeseries_uuids(config):
             count = int(timeseries.count)
             added = min(1000 + added, count)
             logger.debug('Collecting timeseries uuids. %s done',
-                         "{:5.2f}%".format(added / count))
+                         "{:5.1f}%".format(added / count * 100))
         except urllib.error.HTTPError:
             logger.exception("Couldn't get all uuids, currently at try: %d. "
                              "url was: %s , previous url was: %s.", tries,
