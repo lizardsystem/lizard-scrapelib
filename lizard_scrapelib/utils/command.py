@@ -26,10 +26,10 @@ def read_config(name):
         return json.load(cfg)
 
 
-def touch_config(date=None):
+def touch_config(name, date=None):
     if not date:
         date = datetime.date.today()
-    config = read_config()
+    config = read_config(name)
     config['last_value_timestamp'] = date.strftime('%Y-%m-%d')
     with open(os.path.join(FILE_BASE, 'var/config/noaa_config.json'), 'w') as \
             cfg:

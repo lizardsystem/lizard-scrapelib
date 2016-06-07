@@ -120,7 +120,7 @@ def grab_and_post(args):
                             password=CONFIG['login']['password'])
             logger.info('File %s uploaded.', output_tif)
             os.remove(output_tif)
-            command.touch_config(position.date())
+            command.touch_config('gpm', position.date())
 
 
 def gdal_translate_and_warp(input_tif, output_tif):

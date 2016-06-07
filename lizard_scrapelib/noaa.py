@@ -245,7 +245,7 @@ def load_historical_data_yearly(
                                       break_on_error)
         os.remove(file_path)
     if last_year == datetime.date.today().year:
-        command.touch_config()
+        command.touch_config('noaa')
 
 
 def superghcnd_filelist():
@@ -288,7 +288,7 @@ def grab_recent(codes=CONFIG['codes'], break_on_error=False):
             lizard.upload_timeseries_data(CONFIG, iterator, timeseries_uuids,
                                           break_on_error)
             os.remove(file_path)
-    command.touch_config()
+    command.touch_config('noaa')
 
 
 def main():
