@@ -5,7 +5,7 @@
   "lizardbase": "https://demo.lizard.net",
   "ftp_from": "jsimpson.pps.eosdis.nasa.gov",
   "ftp_to": "ftp.ddsc.nl",
-  "ftp_to_dir": "ftp/roel_edit/gpm",
+  "ftp_to_dir": "ftp/nens_open_data/gpm",
   "data_dir": "data/gpm/",
   "lizard_slug": "GPM_WORLD_RAIN",
   "commandline_args": {

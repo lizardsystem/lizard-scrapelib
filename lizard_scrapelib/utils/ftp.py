@@ -25,7 +25,6 @@ logger = command.setup_logger(__name__)
 
 def upload_file(file_path, ftp_url, ftp_dir, username="anonymous",
                 password=""):
-    print('Storing: %s to %s', file_path, ftp_url)
     logger.debug('Storing: %s to %s', file_path, ftp_url)
     with pysftp.Connection(ftp_url, username=username, password=password) \
             as sftp:

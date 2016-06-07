@@ -205,7 +205,7 @@ def load_historical_data(
     locations.all_pages = False
     location_names = (x['name'].strip('NOAA_') for l in
                       locations.download(name__startswith="NOAA_",
-                                         page_size=1000) for x in l )
+                                         page_size=1000) for x in l)
     from_date = datetime.datetime(first_year,1,1)
     timeseries_uuids = lizard.find_timeseries_uuids(CONFIG)
     for location_name in location_names:

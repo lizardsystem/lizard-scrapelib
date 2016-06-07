@@ -106,7 +106,6 @@ def grab_and_post(args):
                 continue
             output_tif = os.path.join(command.FILE_BASE,
                                       args.data_dir, to_file)
-            print("NOT SKIPPING!!: ", output_tif)
             logger.debug('Warping %stif to %s', from_file, output_tif)
             gdal_translate_and_warp(
                 input_tif=os.path.join(command.FILE_BASE, args.data_dir,
@@ -120,6 +119,7 @@ def grab_and_post(args):
                             username=CONFIG['login']['username'],
                             password=CONFIG['login']['password'])
             logger.info('File %s uploaded.', output_tif)
+            os.remove(output_tif)
 
 
 def gdal_translate_and_warp(input_tif, output_tif):
