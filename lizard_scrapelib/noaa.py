@@ -1,6 +1,7 @@
 from calendar import Calendar
 import datetime
 import os
+from ftplib import error_perm
 
 try:
     from pyftpclient import PyFTPclient
@@ -208,17 +209,24 @@ def load_historical_data(
     from_date = datetime.datetime(first_year,1,1)
     timeseries_uuids = lizard.find_timeseries_uuids(CONFIG)
     for location_name in location_names:
-        file_path = ftp.grab_file(
-            filename=location_name + '.dly',
-            ftp_url="ftp.ncdc.noaa.gov",
-            ftp_dir="pub/data/ghcn/daily/all",
-            unzip_gzip=False,
-            unzip_tar=False)
-        for code in codes:
-            x = [parse_dly(file_path, code, from_date)]
-            lizard.upload_timeseries_data(
-                CONFIG, x, timeseries_uuids, break_on_error=False)
-        os.remove(file_path)
+        try:
+            file_path = ftp.grab_file(
+                filename=location_name + '.dly',
+                ftp_url="ftp.ncdc.noaa.gov",
+                ftp_dir="pub/data/ghcn/daily/all",
+                unzip_gzip=False,
+                unzip_tar=False)
+            for code in codes:
+                x = [parse_dly(file_path, code, from_date)]
+                lizard.upload_timeseries_data(
+                    CONFIG, x, timeseries_uuids, break_on_error=False)
+            os.remove(file_path)
+        except error_perm:
+            logger.exception('Daily file: %s does not exist on '
+                             'ftp.ncdc.noaa.gov/pub/data/ghcn/daily/all',
+                             location_name + '.dly')
+
+
 
 
 def load_historical_data_yearly(
