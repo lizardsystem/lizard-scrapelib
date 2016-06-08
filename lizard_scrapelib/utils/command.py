@@ -58,6 +58,10 @@ def store_to_dict(dict_name='dict_', dict_key_name='key', keep_dict_key=True):
     return store_to_dict_decorator
 
 
+def log_filename(name):
+    return os.path.join(FILE_BASE, "var/log/" + name + ".log")
+
+
 def argparser(config):
     codes = ",".join(config.get('codes', []))
     login = config.get('login', {})
@@ -249,15 +253,13 @@ def argparser(config):
         else:
             debuglevel = logging.INFO
 
-        log_filename = os.path.join(FILE_BASE, "var/log/" + config['name'] +
-                                    ".log")
         logging.basicConfig(
-            filename=log_filename,
+            filename=log_filename(config['name']),
             level=debuglevel,
             format='%(asctime)s %(levelname)s: %(message)s'
         )
 
-        logger.debug('log_filename is: %s', log_filename)
+        logger.debug('log_filename is: %s', log_filename(config['name']))
 
     if 'code_types' in commandline_args:
         args.codes = args.code_types.split(',')

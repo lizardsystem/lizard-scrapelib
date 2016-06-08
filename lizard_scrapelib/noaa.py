@@ -2,6 +2,7 @@ from calendar import Calendar
 import datetime
 import os
 from ftplib import error_perm
+import re
 
 try:
     from pyftpclient import PyFTPclient
@@ -198,14 +199,30 @@ def parse_dly(file_path, element, from_date):
     return station_name, timeseries_name, total_data
 
 
+def read_stations_from_log():
+    logger.info('Reading stations from log.')
+    stations = set()
+    with open(command.log_filename('noaa'), 'r') as log:
+        for line in log:
+            for station in re.findall('(?<=NOAA_)[A-Z0-9]+', line):
+                stations.add(station)
+    logger.info('%d stations have already been parsed. These are skipped.',
+                len(stations))
+    return stations
+
+
 def load_historical_data(
-        first_year, last_year, codes=CONFIG['codes'], break_on_error=False):
+        first_year, last_year, codes=CONFIG['codes'], break_on_error=False,
+        skip_stations_in_log=True):
+    if skip_stations_in_log:
+        parsed_locations = read_stations_from_log()
     locations = lizard.endpoint(CONFIG, 'locations')
     locations.max_results = 10000000
     locations.all_pages = False
     location_names = (x['name'].strip('NOAA_') for l in
                       locations.download(name__startswith="NOAA_",
-                                         page_size=1000) for x in l)
+                                         page_size=1000)
+                      for x in l if not x['name'] in parsed_locations)
     from_date = datetime.datetime(first_year,1,1)
     timeseries_uuids = lizard.find_timeseries_uuids(CONFIG)
     for location_name in location_names:
