@@ -221,6 +221,7 @@ def load_historical_data(
     locations.all_pages = False
     location_names = (x['name'].strip('NOAA_') for l in
                       locations.download(name__startswith="NOAA_",
+                                         in_bbox=CONFIG['bbox'],
                                          page_size=1000)
                       for x in l if not x['name'] in parsed_locations)
     from_date = datetime.datetime(first_year,1,1)
@@ -242,8 +243,6 @@ def load_historical_data(
             logger.exception('Daily file: %s does not exist on '
                              'ftp.ncdc.noaa.gov/pub/data/ghcn/daily/all',
                              location_name + '.dly')
-
-
 
 
 def load_historical_data_yearly(
